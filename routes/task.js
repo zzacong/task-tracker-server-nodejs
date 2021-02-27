@@ -1,78 +1,98 @@
 const express = require('express')
-const tasks = require('../data')
+const Task = require('../models/Task.model')
 
 const router = express.Router()
 
 // GET All tasks
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
+  const tasks = await Task.find({})
   res.send(tasks)
 })
 
 // GET One task
-// GET /tasks/:id
-router.get('/:id', (req, res) => {
+router.get('/:id', async (req, res) => {
   const { id } = req.params
-
-  const task = tasks.find(task => task.id === +id)
-  console.log(task)
-  res.send(task)
+  try {
+    const task = await Task.findById(id)
+    if (!task) return res.status(404).send({ error: `No task with id ${id}` })
+    console.log(task)
+    res.send(task)
+  } catch (error) {
+    res.status(500).send(error.message)
+  }
 })
 
 // POST Create a task
-router.post('/', (req, res) => {
+router.post('/', async (req, res) => {
   const { text, day, reminder } = req.body
 
-  if (!text || !day || !reminder)
+  if (!text || !day)
     return res
       .status(400)
       .send({ error: 'Please provide text, day and reminder' })
 
-  const lastId = tasks.slice(-1)[0].id
-  const newId = lastId + 1
-
-  const task = {
-    id: newId,
+  const task = new Task({
     text,
     day,
-    reminder,
-  }
+    reminder: reminder ?? false,
+  })
 
-  tasks.push(task)
+  await task.save()
   console.log(task)
   res.status(201).send(task)
 })
 
 // PUT Update a task
-router.put('/:id', (req, res) => {
+router.put('/:id', async (req, res) => {
   const { id } = req.params
   const { text, day, reminder } = req.body
 
-  const found = tasks.some(task => task.id === +id)
+  try {
+    const task = await Task.findById(id)
+    if (!task)
+      return res.status(404).send({ error: `No task with the id ${id}` })
 
-  if (!found) return res.status(404).send({ error: `No task with id ${id}` })
+    task.text = text ?? task.text
+    task.day = day ?? task.day
+    task.reminder = reminder ?? task.reminder
 
-  tasks.forEach(task => {
-    if (task.id === +id) {
-      task = {
-        id,
-        text: text ?? task.text,
-        day: day ?? task.day,
-        reminder: reminder ?? task.reminder,
-      }
-    }
-  })
+    // const updatedTask = await task.save()
+    await task.save()
+    res.send(task)
+  } catch (error) {
+    res.status(500).send(error.message)
+  }
 
-  res.send(updatedTask)
+  // try {
+  //   const updated = await Task.updateOne(
+  //     { _id: id },
+  //     { text, day, reminder },
+  //     { omitUndefined: true } // delete any properties whose value is undefined
+  //   )
+  //   if (!updated.n) return res.status(404).json(null)
+
+  //   console.log('updated')
+  //   res.json(await Task.findById(id))
+  // } catch (error) {
+  //   console.log(error.message)
+  //   res.status(500).json({ error: error.message })
+  // }
 })
 
 // DELETE Delete a task
-router.delete('/:id', (req, res) => {
+router.delete('/:id', async (req, res) => {
   const { id } = req.params
-  let index = tasks.findIndex(task => task.id === +id)
-  if (index < 0) return res.status(404).send(false)
 
-  tasks.splice(index, 1)
-  res.send(true)
+  try {
+    const deleted = await Task.deleteOne({ _id: id })
+    if (!deleted.deletedCount) return res.status(404).send(false)
+
+    console.log('deleted')
+    return res.send(true)
+  } catch (error) {
+    console.log(error.message)
+    return res.status(500).send({ error: error.message })
+  }
 })
 
 module.exports = router
